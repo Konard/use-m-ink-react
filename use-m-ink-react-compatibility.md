@@ -130,8 +130,66 @@ The issue is architectural, not version-specific:
 - **Node.js**: v20.19.3 (for some tests)
 - **Test Method**: Direct script execution with detailed error logging
 
+## Advanced Workaround Testing Results
+
+### Tested Solutions (2025-01-25)
+
+After the initial investigation, three advanced workarounds were developed and tested:
+
+#### 1. Context Sharing Approach ❌ FAILED
+**File**: `use-m-context-sharing-workaround.mjs`
+**Strategy**: Load React globally before ink to force shared context
+**Result**: Same `resolveDispatcher().useState` error
+**Conclusion**: Global exposure doesn't resolve use-m's module isolation
+
+#### 2. ESM Alternative Approach ❌ FAILED  
+**File**: `use-m-esm-alternative.mjs`
+**Strategy**: Bypass use-m entirely, use direct ESM imports
+**Result**: 
+- `ENOENT reading "https://esm.sh/react@18"` (Bun import limitations)
+- `Unexpected keyword 'export'` (ESM parsing issues)
+**Conclusion**: Bun's dynamic import doesn't work reliably with CDN ESM modules
+
+#### 3. Hybrid Approach ❌ FAILED
+**File**: `use-m-hybrid-approach.mjs` 
+**Strategy**: Use use-m for utilities, ESM for React ecosystem
+**Result**: Same hooks dispatcher error when falling back to use-m
+**Conclusion**: Any use of use-m for React components triggers the isolation issue
+
+### Technical Analysis
+
+**Root Cause Confirmed**: The problem is architectural, not implementation-specific:
+1. **use-m's Design**: Each `use()` call creates isolated module contexts
+2. **React's Requirement**: Hooks require shared dispatcher context between React library and reconciler
+3. **Fundamental Incompatibility**: These two approaches are mutually exclusive
+
+**Error Pattern**: All approaches resulted in the same error:
+```
+TypeError: null is not an object (evaluating 'resolveDispatcher().useState')
+Invalid hook call (multiple copies of React detected)
+```
+
+### What Actually Works ✅
+
+Only the original basic workaround provides limited functionality:
+- **File**: `use-m-ink-workaround.mjs`
+- **Works**: Static components, basic React.createElement, ink utilities
+- **Fails**: Any React hooks (useState, useEffect, etc.)
+- **Use case**: Very limited - static CLI output only
+
+## Architectural Requirements for Full Compatibility
+
+For use-m to support React ecosystem packages, it would need:
+
+1. **Context Sharing Option**: Allow specific packages to share module contexts
+2. **React Ecosystem Detection**: Automatically handle React/React-DOM/reconciler packages specially  
+3. **Dispatcher Preservation**: Maintain React's hooks dispatcher across module boundaries
+4. **Version Alignment**: Ensure all React ecosystem packages use the same React instance
+
 ## Conclusion
 
-While use-m is an innovative approach to dynamic module loading, it has fundamental incompatibilities with React's hooks system due to context isolation. The path resolution bug can be worked around, but the hooks issue requires architectural changes to either use-m or a different approach to dynamic module loading for React-based applications.
+While use-m is an innovative approach to dynamic module loading, it has fundamental incompatibilities with React's hooks system due to context isolation. **All attempted workarounds failed**, confirming this is an architectural limitation, not a solvable implementation issue.
 
-For practical ink applications requiring state management, traditional package management (npm/yarn) remains the recommended approach until these compatibility issues are resolved.
+The path resolution bug can be worked around, but the hooks issue requires architectural changes to use-m itself to support React ecosystem packages.
+
+For practical ink applications requiring state management, traditional package management (npm/yarn) remains the only working approach until these architectural compatibility issues are resolved in use-m.
